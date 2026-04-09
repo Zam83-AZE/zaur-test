@@ -8,9 +8,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddFido2(options =>
 {
-    options.ServerDomain = "http://localhost:5050";
+    options.ServerDomain = "http://localhost";
     options.ServerName = "Rəşadın Təhlükəsiz Saytı";
-    options.Origins = new HashSet<string> { "http://localhost:5050" };
+    options.Origins = new HashSet<string> { "http://localhost" };
 });
 
 var app = builder.Build();
