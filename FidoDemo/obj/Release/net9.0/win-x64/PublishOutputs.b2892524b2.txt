@@ -1,0 +1,5 @@
+/workspaces/zaur-test/FidoDemo/bin/Release/net9.0/win-x64/publish/appsettings.Development.json
+/workspaces/zaur-test/FidoDemo/bin/Release/net9.0/win-x64/publish/appsettings.json
+/workspaces/zaur-test/FidoDemo/bin/Release/net9.0/win-x64/publish/devices.json
+/workspaces/zaur-test/FidoDemo/bin/Release/net9.0/win-x64/publish/FidoDemo.pdb
+/workspaces/zaur-test/FidoDemo/bin/Release/net9.0/win-x64/publish/FidoDemo.exe
