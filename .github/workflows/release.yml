@@ -1,0 +1,144 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }}/${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows
+            arch: amd64
+            runner: windows-latest
+            worker_output: sysworker-windows-amd64.exe
+            installer_output: installer-windows-amd64.exe
+          - os: linux
+            arch: amd64
+            runner: ubuntu-latest
+            worker_output: sysworker-linux-amd64
+            installer_output: installer-linux-amd64
+          - os: darwin
+            arch: amd64
+            runner: macos-latest
+            worker_output: sysworker-darwin-amd64
+            installer_output: installer-darwin-amd64
+          - os: darwin
+            arch: arm64
+            runner: macos-latest
+            worker_output: sysworker-darwin-arm64
+            installer_output: installer-darwin-arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Prepare dependencies
+        run: |
+          cd worker && go mod tidy
+          cd ../installer && go mod tidy
+
+      - name: Build Worker
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 0
+        run: |
+          cd worker
+          go build -ldflags "-s -w -X github.com/Zam83-AZE/zaur-test/worker/pkg/version.Version=${{ steps.version.outputs.VERSION }} -X github.com/Zam83-AZE/zaur-test/worker/pkg/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o ../dist/${{ matrix.worker_output }} ./cmd/worker/
+
+      - name: Build Installer
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 0
+        run: |
+          cd installer
+          go build -ldflags "-s -w -X github.com/Zam83-AZE/zaur-test/installer/pkg/version.Version=${{ steps.version.outputs.VERSION }} -X github.com/Zam83-AZE/zaur-test/installer/pkg/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o ../dist/${{ matrix.installer_output }} ./cmd/installer/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/
+          retention-days: 1
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          pattern: release-*
+          merge-multiple: true
+
+      - name: List build outputs
+        run: ls -lh dist/
+
+      - name: Generate SHA256 checksums
+        run: |
+          cd dist
+          sha256sum * > checksums.txt
+          echo "=== checksums.txt ==="
+          cat checksums.txt
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release create "$TAG" \
+            dist/* \
+            --title "$TAG" \
+            --notes "## System Worker $TAG
+
+          ### Downloads
+          | Platform | Worker Binary | Installer |
+          |----------|--------------|-----------|
+          | Linux x64 | \`sysworker-linux-amd64\` | \`installer-linux-amd64\` |
+          | Windows x64 | \`sysworker-windows-amd64.exe\` | \`installer-windows-amd64.exe\` |
+          | macOS Intel | \`sysworker-darwin-amd64\` | \`installer-darwin-amd64\` |
+          | macOS Apple Silicon | \`sysworker-darwin-arm64\` | \`installer-darwin-arm64\` |
+
+          ### Quick Install (Linux)
+          \`\`\`bash
+          chmod +x installer-linux-amd64
+          sudo ./installer-linux-amd64
+          \`\`\`
+
+          ### Quick Install (macOS)
+          \`\`\`bash
+          chmod +x installer-darwin-arm64
+          ./installer-darwin-arm64
+          \`\`\`
+
+          ### Verify Checksums
+          \`\`\`bash
+          sha256sum -c checksums.txt
+          \`\`\`
+
+          ### After Installation
+          - Worker HTTPS: https://localhost:8088/health
+          - System Data: https://localhost:8088/data
+          - Logs: https://localhost:8088/logs
+          "
