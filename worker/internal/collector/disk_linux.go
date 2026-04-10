@@ -11,6 +11,31 @@ import (
 	"github.com/Zam83-AZE/zaur-test/worker/internal/models"
 )
 
+// virtualFSTypes are filesystem types that are not real disk partitions
+var virtualFSTypes = map[string]bool{
+	"devpts":    true,
+	"efivarfs":  true,
+	"securityfs": true,
+	"pstore":    true,
+	"bpf":       true,
+	"debugfs":   true,
+	"hugetlbfs": true,
+	"mqueue":    true,
+	"tracefs":   true,
+	"fusectl":   true,
+	"configfs":  true,
+	"binfmt_misc": true,
+	"overlay":   true,
+	"nsfs":      true,
+	"proc":      true,
+	"sysfs":     true,
+	"tmpfs":     true,
+	"devtmpfs":  true,
+	"cgroup":    true,
+	"cgroup2":   true,
+	"none":      true,
+}
+
 func CollectDisks() []models.DiskInfo {
 	var disks []models.DiskInfo
 
@@ -32,15 +57,29 @@ func CollectDisks() []models.DiskInfo {
 		mountpoint := fields[1]
 		fstype := fields[2]
 
-		// Skip virtual/dev filesystems
+		// Skip virtual filesystems by type
+		if virtualFSTypes[fstype] {
+			continue
+		}
+
+		// Skip fuse.* filesystems (gvfsd-fuse, portal, etc.)
+		if strings.HasPrefix(fstype, "fuse.") {
+			continue
+		}
+
+		// Skip virtual device names
 		if strings.HasPrefix(device, "none") ||
 			strings.HasPrefix(device, "tmpfs") ||
-			strings.HasPrefix(device, "devtmpfs") ||
 			strings.HasPrefix(device, "cgroup") ||
 			strings.HasPrefix(device, "proc") ||
 			strings.HasPrefix(device, "sys") ||
 			strings.HasPrefix(device, "run") ||
 			strings.HasPrefix(device, "udev") {
+			continue
+		}
+
+		// Skip devices that don't start with /dev/
+		if !strings.HasPrefix(device, "/dev/") {
 			continue
 		}
 
@@ -64,24 +103,11 @@ func CollectDisks() []models.DiskInfo {
 		}
 
 		// Get model and serial from /sys/block/
-		if strings.HasPrefix(device, "/dev/") {
-			devName := strings.TrimPrefix(device, "/dev/")
-			// Handle partition names like sda1 -> sda
-			for _, suffix := range []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"} {
-				if strings.HasSuffix(devName, suffix) && len(devName) > len(suffix) {
-					devName = devName[:len(devName)-len(suffix)]
-					break
-				}
-			}
-			// Also handle nvme0n1p1 -> nvme0n1
-			if idx := strings.LastIndex(devName, "p"); idx > 0 {
-				candidate := devName[:idx]
-				if _, err := os.Stat("/sys/block/" + candidate); err == nil {
-					devName = candidate
-				}
-			}
-
-			blockPath := "/sys/block/" + devName
+		devName := strings.TrimPrefix(device, "/dev/")
+		// Handle partition names like sda1 -> sda, nvme0n1p1 -> nvme0n1
+		trimmed := trimPartitionSuffix(devName)
+		if trimmed != devName {
+			blockPath := "/sys/block/" + trimmed
 			if modelData, err := os.ReadFile(blockPath + "/device/model"); err == nil {
 				disk.Model = strings.TrimSpace(string(modelData))
 			}
@@ -90,7 +116,7 @@ func CollectDisks() []models.DiskInfo {
 			}
 
 			// Determine type
-			if strings.HasPrefix(devName, "nvme") || strings.HasPrefix(devName, "mmcblk") {
+			if strings.HasPrefix(trimmed, "nvme") || strings.HasPrefix(trimmed, "mmcblk") {
 				disk.Type = "NVMe"
 			} else if _, err := os.Stat(blockPath + "/device/rotational"); err == nil {
 				if rotData, err := os.ReadFile(blockPath + "/device/rotational"); err == nil {
@@ -107,4 +133,25 @@ func CollectDisks() []models.DiskInfo {
 	}
 
 	return disks
+}
+
+func trimPartitionSuffix(devName string) string {
+	// Handle nvme0n1p1 -> nvme0n1
+	if idx := strings.LastIndex(devName, "p"); idx > 0 {
+		candidate := devName[:idx]
+		if _, err := os.Stat("/sys/block/" + candidate); err == nil {
+			return candidate
+		}
+	}
+	// Handle sda1 -> sda, mmcblk0p1 -> mmcblk0
+	for i := len(devName) - 1; i >= 0; i-- {
+		if devName[i] < '0' || devName[i] > '9' {
+			candidate := devName[:i+1]
+			if _, err := os.Stat("/sys/block/" + candidate); err == nil {
+				return candidate
+			}
+			break
+		}
+	}
+	return devName
 }

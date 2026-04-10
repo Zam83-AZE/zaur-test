@@ -11,6 +11,15 @@ import (
 	"github.com/Zam83-AZE/zaur-test/worker/internal/models"
 )
 
+// Docker/container interface patterns
+var virtualPrefixes = []string{
+	"br-",    // Docker bridge
+	"veth",   // Docker veth
+	"docker", // Docker
+	"virbr",  // Virtual bridge (libvirt)
+	"vnet",   // libvirt
+}
+
 func CollectNetwork() []models.NetworkInterface {
 	var interfaces []models.NetworkInterface
 
@@ -44,27 +53,27 @@ func CollectNetwork() []models.NetworkInterface {
 
 		// Determine interface type
 		ni.InterfaceType = "Unknown"
-		driverPath := "/sys/class/net/" + iface.Name + "/device/driver"
-		if link, err := os.Readlink(driverPath); err == nil {
-			driverName := filepath.Base(link)
-			if strings.Contains(strings.ToLower(driverName), "wireless") ||
-				strings.Contains(strings.ToLower(driverName), "wifi") {
-				ni.InterfaceType = "WiFi"
-			} else if strings.Contains(strings.ToLower(driverName), "eth") ||
-				strings.Contains(strings.ToLower(driverName), "r8169") ||
-				strings.Contains(strings.ToLower(driverName), "e1000") {
-				ni.InterfaceType = "Ethernet"
+
+		// Check for WiFi
+		if _, err := os.Stat("/sys/class/net/" + iface.Name + "/wireless"); err == nil {
+			ni.InterfaceType = "WiFi"
+		} else {
+			// Check for virtual/container interfaces
+			isVirtual := false
+			for _, prefix := range virtualPrefixes {
+				if strings.HasPrefix(iface.Name, prefix) {
+					isVirtual = true
+					break
+				}
+			}
+			if isVirtual {
+				ni.InterfaceType = "Virtual"
 			} else {
 				ni.InterfaceType = "Ethernet"
 			}
 		}
 
-		// Try to get wifi type from wireless symlink
-		if _, err := os.Stat("/sys/class/net/" + iface.Name + "/wireless"); err == nil {
-			ni.InterfaceType = "WiFi"
-		}
-
-		// Skip interfaces with no IPs
+		// Skip interfaces with no useful info
 		if len(ni.IPAddresses) > 0 || ni.MACAddress != "" {
 			interfaces = append(interfaces, ni)
 		}

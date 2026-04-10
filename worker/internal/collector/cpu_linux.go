@@ -4,6 +4,7 @@ package collector
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -37,26 +38,21 @@ func CollectCPU() models.CPUInfo {
 					freqFound = true
 				}
 			}
-			if strings.HasPrefix(line, "physical id") {
-				break
-			}
 		}
 	}
 
-	// Get physical cores from CPU topology
-	if data, err := os.ReadFile("/sys/devices/system/cpu/cpu0/topology/core_siblings_list"); err == nil {
-		rangeStr := strings.TrimSpace(string(data))
-		count := 1
-		if strings.Contains(rangeStr, "-") {
-			parts := strings.Split(rangeStr, "-")
-			if len(parts) == 2 {
-				start, _ := strconv.Atoi(strings.TrimSpace(parts[0]))
-				end, _ := strconv.Atoi(strings.TrimSpace(parts[1]))
-				count = end - start + 1
-			}
+	// Get physical cores by counting unique core IDs
+	coreIDs := make(map[string]bool)
+	cpuDirs, _ := filepath.Glob("/sys/devices/system/cpu/cpu[0-9]*")
+	for _, cpuDir := range cpuDirs {
+		coreIDPath := filepath.Join(cpuDir, "topology", "core_id")
+		if data, err := os.ReadFile(coreIDPath); err == nil {
+			coreIDs[strings.TrimSpace(string(data))] = true
 		}
-		info.CoresPhysical = count
-	} else if info.CoresLogical > 0 {
+	}
+	if len(coreIDs) > 0 {
+		info.CoresPhysical = len(coreIDs)
+	} else {
 		info.CoresPhysical = info.CoresLogical
 	}
 
