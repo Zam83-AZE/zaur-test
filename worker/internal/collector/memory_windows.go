@@ -3,6 +3,8 @@
 package collector
 
 import (
+	"unsafe"
+
 	"golang.org/x/sys/windows"
 
 	"github.com/Zam83-AZE/zaur-test/worker/internal/models"
@@ -23,7 +25,7 @@ func CollectMemory() models.MemoryInfo {
 	procGlobalMem := modkernel32.NewProc("GlobalMemoryStatusEx")
 
 	status := memoryStatusEx{dwLength: 64}
-	_, _, err := procGlobalMem.Call(uintptr(windows.Pointer(&status)))
+	_, _, err := procGlobalMem.Call(uintptr(unsafe.Pointer(&status)))
 	if err != nil && err != windows.Errno(0) {
 		return info
 	}
