@@ -15,6 +15,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+      - name: Prepare Worker Dependencies
+        run: cd worker && go mod tidy
       - name: Go Vet - Worker
         run: cd worker && go vet ./...
       - name: Go Vet - Installer
@@ -53,6 +55,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+      - name: Prepare Worker Dependencies
+        run: cd worker && go mod tidy
       - name: Build Worker
         env:
           GOOS: ${{ matrix.os }}
@@ -91,6 +95,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+      - name: Prepare Worker Dependencies
+        run: cd worker && go mod tidy
       - name: Test Worker
         run: |
           cd worker
