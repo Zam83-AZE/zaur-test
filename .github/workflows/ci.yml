@@ -19,6 +19,8 @@ jobs:
         run: cd worker && go mod tidy
       - name: Go Vet - Worker
         run: cd worker && go vet ./...
+      - name: Prepare Installer Dependencies
+        run: cd installer && go mod tidy
       - name: Go Vet - Installer
         run: cd installer && go vet ./...
 
@@ -57,6 +59,8 @@ jobs:
           go-version: '1.22'
       - name: Prepare Worker Dependencies
         run: cd worker && go mod tidy
+      - name: Prepare Installer Dependencies
+        run: cd installer && go mod tidy
       - name: Build Worker
         env:
           GOOS: ${{ matrix.os }}
@@ -72,7 +76,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           cd installer
-          go build -ldflags "-s -w" -o ../dist/${{ matrix.installer_output }} ./cmd/installer/
+          go build -ldflags "-s -w -X github.com/Zam83-AZE/zaur-test/installer/pkg/version.Version=dev -X github.com/Zam83-AZE/zaur-test/installer/pkg/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o ../dist/${{ matrix.installer_output }} ./cmd/installer/
       - name: Upload Worker Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -97,6 +101,8 @@ jobs:
           go-version: '1.22'
       - name: Prepare Worker Dependencies
         run: cd worker && go mod tidy
+      - name: Prepare Installer Dependencies
+        run: cd installer && go mod tidy
       - name: Test Worker
         run: |
           cd worker
