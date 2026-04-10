@@ -5,9 +5,9 @@ package collector
 import (
 	"os"
 	"runtime"
-	"syscall"
 
 	"github.com/Zam83-AZE/zaur-test/worker/internal/models"
+	"golang.org/x/sys/windows/registry"
 )
 
 func getDomain() string {
@@ -20,22 +20,28 @@ func getDomain() string {
 	return ""
 }
 
-func CollectOS() models.OSInfo {
+func collectOSWindows() models.OSInfo {
 	info := models.OSInfo{Arch: runtime.GOARCH}
 
-	k, err := syscall.OpenKey(syscall.HKEY_LOCAL_MACHINE,
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE,
 		`SOFTWARE\Microsoft\Windows NT\CurrentVersion`,
-		syscall.KEY_READ)
+		registry.QUERY_VALUE)
 	if err == nil {
-		defer syscall.CloseHandle(k)
-		if name, _, err := syscall.RegQueryStringValue(k, "ProductName"); err == nil {
+		defer k.Close()
+
+		if name, _, err := k.GetStringValue("ProductName"); err == nil {
 			info.Name = name
 		}
-		if ver, _, err := syscall.RegQueryStringValue(k, "DisplayVersion"); err == nil {
+		if ver, _, err := k.GetStringValue("DisplayVersion"); err == nil {
+			info.Version = ver
+		} else if ver, _, err := k.GetStringValue("CurrentVersion"); err == nil {
 			info.Version = ver
 		}
-		if build, _, err := syscall.RegQueryStringValue(k, "CurrentBuild"); err == nil {
+		if build, _, err := k.GetStringValue("CurrentBuild"); err == nil {
 			info.Build = build
+			if ubr, _, err := k.GetStringValue("UBR"); err == nil {
+				info.Build = build + "." + ubr
+			}
 		}
 	}
 
