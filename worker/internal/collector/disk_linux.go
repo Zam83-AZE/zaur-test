@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/Zam83-AZE/zaur-test/worker/internal/models"
 )
@@ -53,12 +54,12 @@ func CollectDisks() []models.DiskInfo {
 			Filesystem: fstype,
 		}
 
-		// Get size info via Statfs
-		fs := os.Statfs_t{}
-		if err := os.Statfs(mountpoint, &fs); err == nil {
-			disk.SizeBytes = int64(fs.Blocks) * int64(fs.Bsize)
+		// Get size info via syscall.Statfs
+		var stat syscall.Statfs_t
+		if err := syscall.Statfs(mountpoint, &stat); err == nil {
+			disk.SizeBytes = int64(stat.Blocks) * int64(stat.Bsize)
 			disk.SizeGB = float64(disk.SizeBytes) / (1024 * 1024 * 1024)
-			disk.FreeBytes = int64(fs.Bfree) * int64(fs.Bsize)
+			disk.FreeBytes = int64(stat.Bfree) * int64(stat.Bsize)
 			disk.FreeGB = float64(disk.FreeBytes) / (1024 * 1024 * 1024)
 		}
 
