@@ -1,0 +1,36 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+sysworker
+sysworker-*
+dist/
+out/
+
+# Test binary
+*.test
+
+# Coverage
+*.out
+coverage.out
+coverage.html
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Go vendor
+worker/vendor/
+installer/vendor/
