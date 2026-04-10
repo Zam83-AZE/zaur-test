@@ -7,8 +7,12 @@ import (
 	"testing"
 )
 
+func newTestServer() *Server {
+	return New(8088, "cert.pem", "key.pem", nil)
+}
+
 func TestHealthEndpoint(t *testing.T) {
-	srv := New(8088, "cert.pem", "key.pem")
+	srv := newTestServer()
 	mux := http.NewServeMux()
 	srv.SetupRoutes(mux)
 
@@ -30,7 +34,7 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestHealthMethodNotAllowed(t *testing.T) {
-	srv := New(8088, "cert.pem", "key.pem")
+	srv := newTestServer()
 	mux := http.NewServeMux()
 	srv.SetupRoutes(mux)
 
@@ -44,7 +48,7 @@ func TestHealthMethodNotAllowed(t *testing.T) {
 }
 
 func TestDataEndpoint(t *testing.T) {
-	srv := New(8088, "cert.pem", "key.pem")
+	srv := newTestServer()
 	mux := http.NewServeMux()
 	srv.SetupRoutes(mux)
 
@@ -70,7 +74,7 @@ func TestDataEndpoint(t *testing.T) {
 }
 
 func TestLogsEndpoint(t *testing.T) {
-	srv := New(8088, "cert.pem", "key.pem")
+	srv := newTestServer()
 	mux := http.NewServeMux()
 	srv.SetupRoutes(mux)
 
@@ -80,5 +84,19 @@ func TestLogsEndpoint(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestLogsDownloadNoLogger(t *testing.T) {
+	srv := newTestServer()
+	mux := http.NewServeMux()
+	srv.SetupRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/logs/download", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotImplemented {
+		t.Fatalf("expected 501, got %d", w.Code)
 	}
 }

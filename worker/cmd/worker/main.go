@@ -12,6 +12,7 @@ import (
 
 	"github.com/Zam83-AZE/zaur-test/worker/internal/certmanager"
 	"github.com/Zam83-AZE/zaur-test/worker/internal/httpserver"
+	"github.com/Zam83-AZE/zaur-test/worker/internal/logger"
 	"github.com/Zam83-AZE/zaur-test/worker/pkg/version"
 )
 
@@ -28,21 +29,46 @@ func main() {
 		os.Exit(0)
 	}
 
-	fmt.Printf("System Worker %s starting...\n", version.Version)
-	fmt.Printf("  Port: %d\n", *port)
-	fmt.Printf("  Cert Dir: %s\n", *certDir)
-	fmt.Printf("  Log Dir: %s\n", *logDir)
-	fmt.Printf("  Log Level: %s\n", *logLevel)
+	// Initialize logger
+	log, err := logger.New(logger.Config{
+		LogDir:    *logDir,
+		BaseName:  "sysworker",
+		Level:     *logLevel,
+		MaxSizeMB: 10,
+		MaxFiles:  5,
+		MaxDays:   30,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: Failed to initialize logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer log.Close()
 
+	log.Info("System Worker %s starting...", version.Version)
+	log.Info("  Port: %d", *port)
+	log.Info("  Cert Dir: %s", *certDir)
+	log.Info("  Log Dir: %s", *logDir)
+	log.Info("  Log Level: %s", *logLevel)
+
+	// Setup TLS certificates
 	cm := certmanager.New(*certDir)
 	if err := cm.EnsureCertificates(); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: Failed to setup certificates: %v\n", err)
+		log.Error("Failed to setup certificates: %v", err)
 		os.Exit(1)
 	}
 	certFile, keyFile := cm.GetCertPaths()
-	fmt.Println("  TLS certificates ready")
+	log.Info("TLS certificates ready")
 
-	srv := httpserver.New(*port, certFile, keyFile)
+	// Try to install cert into OS trust store
+	if err := cm.InstallToSystemTrustStore(); err != nil {
+		log.Warn("Could not install certificate to system trust store: %v", err)
+		log.Warn("Browsers may show security warnings. To trust manually, import %s", certFile)
+	} else {
+		log.Info("Certificate installed to system trust store")
+	}
+
+	// Setup HTTP server
+	srv := httpserver.New(*port, certFile, keyFile, log)
 	mux := http.NewServeMux()
 	srv.SetupRoutes(mux)
 
@@ -55,24 +81,25 @@ func main() {
 	}
 
 	go func() {
-		fmt.Printf("  Server listening on https://localhost:%d\n", *port)
+		log.Info("Server listening on https://localhost:%d", *port)
 		if err := httpServer.ListenAndServeTLS(certFile, keyFile); err != nil && err != http.ErrServerClosed {
-			fmt.Fprintf(os.Stderr, "ERROR: Server failed: %v\n", err)
+			log.Error("Server failed: %v", err)
 			os.Exit(1)
 		}
 	}()
 
+	// Wait for shutdown signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-quit
-	fmt.Printf("\n  Received signal %v, shutting down...\n", sig)
+	log.Info("Received signal %v, shutting down...", sig)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := httpServer.Shutdown(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: Shutdown failed: %v\n", err)
+		log.Error("Shutdown failed: %v", err)
 	}
-	fmt.Println("  Server stopped")
+	log.Info("Server stopped")
 }
 
 func defaultCertDir() string {

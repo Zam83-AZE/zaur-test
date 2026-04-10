@@ -2,26 +2,33 @@ package httpserver
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Zam83-AZE/zaur-test/worker/internal/collector"
+	"github.com/Zam83-AZE/zaur-test/worker/internal/logger"
 	"github.com/Zam83-AZE/zaur-test/worker/pkg/version"
 )
 
 type Server struct {
-	port      int
-	startTime time.Time
-	certFile  string
-	keyFile   string
+	port       int
+	startTime  time.Time
+	certFile   string
+	keyFile    string
+	logger     *logger.Logger
 }
 
-func New(port int, certFile, keyFile string) *Server {
+func New(port int, certFile, keyFile string, log *logger.Logger) *Server {
 	return &Server{
 		port:      port,
 		startTime: time.Now(),
 		certFile:  certFile,
 		keyFile:   keyFile,
+		logger:    log,
 	}
 }
 
@@ -39,10 +46,35 @@ type logResponse struct {
 }
 
 func (s *Server) SetupRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/health", s.handleHealth)
-	mux.HandleFunc("/data", s.handleData)
-	mux.HandleFunc("/logs", s.handleLogs)
-	mux.HandleFunc("/logs/download", s.handleLogsDownload)
+	mux.HandleFunc("/health", s.logMiddleware(s.handleHealth))
+	mux.HandleFunc("/data", s.logMiddleware(s.handleData))
+	mux.HandleFunc("/logs", s.logMiddleware(s.handleLogs))
+	mux.HandleFunc("/logs/download", s.logMiddleware(s.handleLogsDownload))
+}
+
+// logMiddleware wraps a handler to log API access
+func (s *Server) logMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, statusCode: 200}
+
+		next(rec, r)
+
+		duration := time.Since(start)
+		if s.logger != nil {
+			s.logger.Access(r.RemoteAddr, r.Method, r.URL.Path, strconv.Itoa(rec.statusCode), duration)
+		}
+	}
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.statusCode = code
+	r.ResponseWriter.WriteHeader(code)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -78,11 +110,40 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	resp := logResponse{
-		TotalLines:    0,
-		ReturnedLines: 0,
-		Logs:          []string{},
+
+	// Parse query params
+	query := r.URL.Query()
+	limit := 100 // default
+	if l := query.Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 10000 {
+			limit = n
+		}
 	}
+	logType := query.Get("type") // "access" or empty for main log
+
+	var lines []string
+	var err error
+
+	if logType == "access" {
+		if s.logger != nil {
+			lines = s.readAccessLogs(limit)
+		}
+	} else {
+		if s.logger != nil {
+			lines, err = s.logger.ReadLastNLines(limit)
+			if err != nil {
+				s.sendError(w, "failed to read logs", http.StatusInternalServerError)
+				return
+			}
+		}
+	}
+
+	resp := logResponse{
+		TotalLines:    len(lines),
+		ReturnedLines: len(lines),
+		Logs:          lines,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
@@ -92,5 +153,63 @@ func (s *Server) handleLogsDownload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	http.Error(w, "Not implemented yet", http.StatusNotImplemented)
+
+	if s.logger == nil {
+		http.Error(w, "Logging not configured", http.StatusNotImplemented)
+		return
+	}
+
+	query := r.URL.Query()
+	logType := query.Get("type") // "access" or empty for main log
+
+	var files []string
+	if logType == "access" {
+		files = s.logger.GetAccessLogFiles()
+	} else {
+		files = s.logger.GetLogFiles()
+	}
+
+	if len(files) == 0 {
+		s.sendError(w, "no log files found", http.StatusNotFound)
+		return
+	}
+
+	// Download the latest log file
+	latestFile := files[len(files)-1]
+	data, err := os.ReadFile(latestFile)
+	if err != nil {
+		s.sendError(w, "failed to read log file", http.StatusInternalServerError)
+		return
+	}
+
+	filename := strings.TrimPrefix(latestFile, s.logger.GetLogDir()+"/")
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.Write(data)
+}
+
+// readAccessLogs reads the last N lines from access log
+func (s *Server) readAccessLogs(limit int) []string {
+	files := s.logger.GetAccessLogFiles()
+	if len(files) == 0 {
+		return nil
+	}
+
+	data, err := os.ReadFile(files[len(files)-1])
+	if err != nil {
+		return nil
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) <= limit {
+		return lines
+	}
+	return lines[len(lines)-limit:]
+}
+
+func (s *Server) sendError(w http.ResponseWriter, msg string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
