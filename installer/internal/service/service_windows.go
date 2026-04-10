@@ -117,8 +117,7 @@ func (s *scmManager) Install(cfg Config) error {
         }
         defer procCloseServiceHandle.Call(svcHandle)
 
-        // Set description via registry
-        return setServiceDescription(s.name, "System Worker - HTTPS service providing system monitoring data on localhost")
+        return nil
 }
 
 func (s *scmManager) Uninstall() error {
@@ -277,20 +276,4 @@ func (s *scmManager) IsInstalled() bool {
         return true
 }
 
-func setServiceDescription(name, description string) error {
-        keyPath := fmt.Sprintf(`SYSTEM\CurrentControlSet\Services\%s`, name)
-        k, err := syscall.OpenKey(syscall.HKEY_LOCAL_MACHINE, keyPath, syscall.KEY_SET_VALUE)
-        if err != nil {
-                return err
-        }
-        defer syscall.CloseKey(k)
 
-        desc, err := syscall.UTF16PtrFromString(description)
-        if err != nil {
-                return err
-        }
-
-        // SetValueExW: data is *byte for the raw bytes of the string
-        err = syscall.SetValue(k, syscall.StringToUTF16Ptr("Description"), syscall.REG_SZ, (*byte)(unsafe.Pointer(desc)), uint32((len(description)+1)*2))
-        return err
-}
