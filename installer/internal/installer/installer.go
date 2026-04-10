@@ -94,7 +94,7 @@ func (inst *Installer) install() error {
                         "  1. Repository '%s/%s' exists and is accessible\n"+
                         "  2. A release exists with assets for %s\n"+
                         "  3. If repo is private, provide -token flag\n",
-                        inst.config.RepoOwner, inst.config.RepoName, inst.platform)
+                        err, inst.config.RepoOwner, inst.config.RepoName, inst.platform)
         }
 
         inst.Printf("       Release: %s\n", release.TagName)
