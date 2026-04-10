@@ -1,0 +1,147 @@
+name: CI - Build & Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    name: Lint & Vet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Go Vet - Worker
+        run: cd worker && go vet ./...
+      - name: Go Vet - Installer
+        run: cd installer && go vet ./...
+
+  compile:
+    name: Compile (${{ matrix.os }}/${{ matrix.arch }})
+    needs: lint
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows
+            arch: amd64
+            runner: windows-latest
+            worker_output: sysworker-windows-amd64.exe
+            installer_output: installer-windows-amd64.exe
+          - os: linux
+            arch: amd64
+            runner: ubuntu-latest
+            worker_output: sysworker-linux-amd64
+            installer_output: installer-linux-amd64
+          - os: darwin
+            arch: amd64
+            runner: macos-latest
+            worker_output: sysworker-darwin-amd64
+            installer_output: installer-darwin-amd64
+          - os: darwin
+            arch: arm64
+            runner: macos-latest
+            worker_output: sysworker-darwin-arm64
+            installer_output: installer-darwin-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Build Worker
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 0
+        run: |
+          cd worker
+          go build -ldflags "-s -w -X github.com/Zam83-AZE/zaur-test/worker/pkg/version.Version=dev -X github.com/Zam83-AZE/zaur-test/worker/pkg/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o ../dist/${{ matrix.worker_output }} ./cmd/worker/
+      - name: Build Installer
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 0
+        run: |
+          cd installer
+          go build -ldflags "-s -w" -o ../dist/${{ matrix.installer_output }} ./cmd/installer/
+      - name: Upload Worker Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/${{ matrix.worker_output }}
+          retention-days: 14
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/${{ matrix.installer_output }}
+          retention-days: 14
+
+  test:
+    name: Unit Tests
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Test Worker
+        run: |
+          cd worker
+          go test ./... -v -count=1 -race -coverprofile=coverage.out
+          go tool cover -func=coverage.out
+      - name: Test Installer
+        run: |
+          cd installer
+          go test ./... -v -count=1 -race
+
+  smoke-test:
+    name: Smoke Test (Linux)
+    needs: compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Worker Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: worker-linux-amd64
+          path: dist/
+      - name: Make executable
+        run: chmod +x dist/sysworker-linux-amd64
+      - name: Start Worker
+        run: |
+          dist/sysworker-linux-amd64 --port 18088 &
+          WORKER_PID=$!
+          echo "WORKER_PID=$WORKER_PID" >> $GITHUB_ENV
+          echo "Worker started with PID $WORKER_PID"
+          sleep 5
+      - name: Health Check (HTTPS)
+        run: |
+          curl -sk https://localhost:18088/health | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          assert data.get('status') == 'ok', f'Unexpected: {data}'
+          print('Health check PASSED:', json.dumps(data, indent=2))
+          "
+      - name: Data Endpoint Check
+        run: |
+          curl -sk https://localhost:18088/data | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          required = ['version', 'hostname', 'os', 'bios', 'cpu', 'memory', 'disks', 'network', 'current_user']
+          for field in required:
+              assert field in data, f'Missing field: {field}'
+          print('Data endpoint PASSED')
+          "
+      - name: Stop Worker
+        if: always()
+        run: |
+          if [ -n "$WORKER_PID" ]; then
+            kill $WORKER_PID 2>/dev/null || true
+          fi
