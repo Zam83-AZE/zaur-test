@@ -106,8 +106,7 @@ jobs:
       - name: Test Worker
         run: |
           cd worker
-          go test ./... -v -count=1 -race -coverprofile=coverage.out
-          go tool cover -func=coverage.out
+          go test ./... -v -count=1 -race
       - name: Test Installer
         run: |
           cd installer
