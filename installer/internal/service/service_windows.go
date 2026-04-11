@@ -24,14 +24,14 @@ func newPlatformManager(name string) (Manager, error) {
 var (
         modadvapi32 = syscall.NewLazyDLL("advapi32.dll")
 
-        procOpenSCManager       = modadvapi32.NewProc("OpenSCManagerW")
-        procCreateService       = modadvapi32.NewProc("CreateServiceW")
-        procOpenService         = modadvapi32.NewProc("OpenServiceW")
-        procDeleteService       = modadvapi32.NewProc("DeleteServiceW")
-        procStartService        = modadvapi32.NewProc("StartServiceW")
-        procControlService      = modadvapi32.NewProc("ControlServiceW")
-        procCloseServiceHandle  = modadvapi32.NewProc("CloseServiceHandle")
-        procQueryServiceStatus  = modadvapi32.NewProc("QueryServiceStatusW")
+        procOpenSCManager      = modadvapi32.NewProc("OpenSCManagerW")
+        procCreateService      = modadvapi32.NewProc("CreateServiceW")
+        procOpenService        = modadvapi32.NewProc("OpenServiceW")
+        procDeleteService      = modadvapi32.NewProc("DeleteService")
+        procStartService       = modadvapi32.NewProc("StartServiceW")
+        procControlService     = modadvapi32.NewProc("ControlService")
+        procCloseServiceHandle = modadvapi32.NewProc("CloseServiceHandle")
+        procQueryServiceStatus = modadvapi32.NewProc("QueryServiceStatus")
 )
 
 const (
