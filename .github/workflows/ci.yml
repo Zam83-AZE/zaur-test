@@ -10,6 +10,8 @@ jobs:
   lint:
     name: Lint & Vet
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -94,6 +96,8 @@ jobs:
     name: Unit Tests
     needs: lint
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -117,6 +121,8 @@ jobs:
     name: Smoke Test (Linux)
     needs: compile
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@v4
       - name: Download Worker Artifact
