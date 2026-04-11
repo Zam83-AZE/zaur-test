@@ -38,7 +38,7 @@ Cross-platform system monitoring service that collects hardware and OS informati
 - SHA256 checksum verification
 - Cross-platform service installation:
   - **Linux**: systemd unit with security hardening
-  - **Windows**: Service Control Manager (SCM)
+  - **Windows**: Task Scheduler (schtasks)
   - **macOS**: launchd plist (user-level agent)
 - Uninstall support with data preservation
 - Graceful fallback if service setup fails
@@ -48,7 +48,7 @@ Cross-platform system monitoring service that collects hardware and OS informati
 | Platform | Architecture | Service Manager | Status |
 |----------|-------------|-----------------|--------|
 | Linux | amd64 | systemd | Tested |
-| Windows | amd64 | SCM | CI passes |
+| Windows | amd64 | Task Scheduler | CI passes |
 | macOS | amd64 (Intel) | launchd | CI passes |
 | macOS | arm64 (Apple Silicon) | launchd | CI passes |
 
@@ -184,11 +184,11 @@ launchctl unload ~/Library/LaunchAgents/sysworker.plist
 launchctl load ~/Library/LaunchAgents/sysworker.plist
 ```
 
-### Windows (SCM)
+### Windows (Task Scheduler)
 ```powershell
-sc.exe query sysworker
-sc.exe stop sysworker
-sc.exe start sysworker
+schtasks /query /tn SysWorker
+schtasks /end /tn SysWorker
+schtasks /run /tn SysWorker
 ```
 
 ## Uninstall
@@ -257,6 +257,6 @@ The release workflow will build all 4 platform binaries, generate SHA256 checksu
 
 - **Go 1.22** with build tags for cross-platform support
 - **crypto/x509** for self-signed TLS certificates
-- **systemd/SCM/launchd** for service management
+- **systemd/Task Scheduler/launchd** for service management
 - **GitHub Actions** for CI/CD (lint, test, cross-compile, smoke test, release)
 - **SHA-256** for binary integrity verification
