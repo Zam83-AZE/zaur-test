@@ -4,7 +4,6 @@ package service
 
 import (
         "fmt"
-        "os"
         "path/filepath"
         "syscall"
         "time"
