@@ -165,7 +165,7 @@ curl -sk https://localhost:8088/data | python3 -m json.tool
 | `-verify` | `false` | Verify SHA256 checksum |
 | `-uninstall` | `false` | Remove worker service and binary |
 | `-force` | `false` | Skip confirmation |
-| `-version` | | Print installer version |
+| `-installer-version` | | Print installer version |
 
 ## API Endpoints
 

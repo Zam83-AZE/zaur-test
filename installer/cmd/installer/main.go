@@ -20,7 +20,7 @@ func main() {
 	force := flag.Bool("force", false, "Skip confirmation prompts")
 	uninstall := flag.Bool("uninstall", false, "Uninstall the worker")
 	verify := flag.Bool("verify", false, "Verify binary checksum before installation")
-	showVersion := flag.Bool("version", false, "Show installer version")
+	showVersion := flag.Bool("installer-version", false, "Show installer version")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "System Worker Installer %s\n\n", version.Version)
