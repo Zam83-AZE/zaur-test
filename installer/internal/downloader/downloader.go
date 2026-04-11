@@ -47,6 +47,13 @@ func New(owner, repo, token string) *Downloader {
 	}
 }
 
+// directAssetURL builds a GitHub release download URL without calling the API.
+// Pattern: https://github.com/{owner}/{repo}/releases/download/{tag}/{filename}
+func (d *Downloader) directAssetURL(tag, filename string) string {
+	return fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
+		d.RepoOwner, d.RepoName, tag, filename)
+}
+
 // GetLatestRelease fetches the latest release information from GitHub.
 func (d *Downloader) GetLatestRelease() (*ReleaseInfo, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", d.RepoOwner, d.RepoName)
@@ -69,20 +76,49 @@ func (d *Downloader) GetLatestRelease() (*ReleaseInfo, error) {
 }
 
 // GetReleaseByTag fetches a specific release by tag name.
+// First tries the GitHub API. If API is unreachable, constructs the download URL directly.
 func (d *Downloader) GetReleaseByTag(tag string) (*ReleaseInfo, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/tags/%s", d.RepoOwner, d.RepoName, tag)
 
 	body, err := d.doRequest(url)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch release for tag %s: %w", tag, err)
+	if err == nil {
+		var release ReleaseInfo
+		if parseErr := json.Unmarshal(body, &release); parseErr == nil {
+			return &release, nil
+		}
 	}
 
-	var release ReleaseInfo
-	if err := json.Unmarshal(body, &release); err != nil {
-		return nil, fmt.Errorf("failed to parse release info: %w", err)
+	// API failed (network error, 404, parse error) — build release info directly
+	return d.buildReleaseFromTag(tag), nil
+}
+
+// buildReleaseFromTag creates a ReleaseInfo using known binary name patterns
+// without calling the GitHub API. This works behind firewalls that block api.github.com.
+func (d *Downloader) buildReleaseFromTag(tag string) *ReleaseInfo {
+	knownBinaries := []string{
+		"sysworker-windows-amd64.exe",
+		"sysworker-linux-amd64",
+		"sysworker-darwin-amd64",
+		"sysworker-darwin-arm64",
+		"installer-windows-amd64.exe",
+		"installer-linux-amd64",
+		"installer-darwin-amd64",
+		"installer-darwin-arm64",
 	}
 
-	return &release, nil
+	var assets []Asset
+	for _, name := range knownBinaries {
+		assets = append(assets, Asset{
+			Name:               name,
+			BrowserDownloadURL: d.directAssetURL(tag, name),
+			Size:               0, // unknown without API
+		})
+	}
+
+	return &ReleaseInfo{
+		TagName: tag,
+		Assets:  assets,
+	}
 }
 
 // FindAsset finds a specific asset by name (case-insensitive partial match).
@@ -143,6 +179,7 @@ func (d *Downloader) DownloadAsset(asset *Asset, destPath string) error {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 
+	// Skip size check when Size is 0 (direct URL, unknown size)
 	if asset.Size > 0 && size != asset.Size {
 		os.Remove(tmpPath)
 		return fmt.Errorf("download size mismatch: expected %d, got %d", asset.Size, size)
