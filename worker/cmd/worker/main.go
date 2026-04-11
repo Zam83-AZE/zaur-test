@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -29,14 +30,21 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Initialize logger
+	// On Windows: try service mode first. If not a service, fall back to interactive.
+	if runtime.GOOS == "windows" {
+		ran := tryRunAsService(*port, *certDir, *logDir, *logLevel)
+		if ran {
+			return
+		}
+	}
+
+	runInteractive(*port, *certDir, *logDir, *logLevel)
+}
+
+func runInteractive(port int, certDir, logDir, logLevel string) {
 	log, err := logger.New(logger.Config{
-		LogDir:    *logDir,
-		BaseName:  "sysworker",
-		Level:     *logLevel,
-		MaxSizeMB: 10,
-		MaxFiles:  5,
-		MaxDays:   30,
+		LogDir: logDir, BaseName: "sysworker", Level: logLevel,
+		MaxSizeMB: 10, MaxFiles: 5, MaxDays: 30,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: Failed to initialize logger: %v\n", err)
@@ -45,13 +53,12 @@ func main() {
 	defer log.Close()
 
 	log.Info("System Worker %s starting...", version.Version)
-	log.Info("  Port: %d", *port)
-	log.Info("  Cert Dir: %s", *certDir)
-	log.Info("  Log Dir: %s", *logDir)
-	log.Info("  Log Level: %s", *logLevel)
+	log.Info("  Port: %d", port)
+	log.Info("  Cert Dir: %s", certDir)
+	log.Info("  Log Dir: %s", logDir)
+	log.Info("  Log Level: %s", logLevel)
 
-	// Setup TLS certificates
-	cm := certmanager.New(*certDir)
+	cm := certmanager.New(certDir)
 	if err := cm.EnsureCertificates(); err != nil {
 		log.Error("Failed to setup certificates: %v", err)
 		os.Exit(1)
@@ -59,7 +66,6 @@ func main() {
 	certFile, keyFile := cm.GetCertPaths()
 	log.Info("TLS certificates ready")
 
-	// Try to install cert into OS trust store
 	if err := cm.InstallToSystemTrustStore(); err != nil {
 		log.Warn("Could not install certificate to system trust store: %v", err)
 		log.Warn("Browsers may show security warnings. To trust manually, import %s", certFile)
@@ -67,13 +73,12 @@ func main() {
 		log.Info("Certificate installed to system trust store")
 	}
 
-	// Setup HTTP server
-	srv := httpserver.New(*port, certFile, keyFile, log)
+	srv := httpserver.New(port, certFile, keyFile, log)
 	mux := http.NewServeMux()
 	srv.SetupRoutes(mux)
 
 	httpServer := &http.Server{
-		Addr:         fmt.Sprintf(":%d", *port),
+		Addr:         fmt.Sprintf(":%d", port),
 		Handler:      mux,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -81,14 +86,13 @@ func main() {
 	}
 
 	go func() {
-		log.Info("Server listening on https://localhost:%d", *port)
+		log.Info("Server listening on https://localhost:%d", port)
 		if err := httpServer.ListenAndServeTLS(certFile, keyFile); err != nil && err != http.ErrServerClosed {
 			log.Error("Server failed: %v", err)
 			os.Exit(1)
 		}
 	}()
 
-	// Wait for shutdown signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-quit
@@ -106,6 +110,13 @@ func defaultCertDir() string {
 	if d := os.Getenv("SYSDATA_DIR"); d != "" {
 		return d + "/cert"
 	}
+	if runtime.GOOS == "windows" {
+		pd := os.Getenv("ProgramData")
+		if pd == "" {
+			pd = `C:\ProgramData`
+		}
+		return pd + `\SysWorker\cert`
+	}
 	home, _ := os.UserHomeDir()
 	if home == "" {
 		return "/tmp/sysworker/cert"
@@ -116,6 +127,13 @@ func defaultCertDir() string {
 func defaultLogDir() string {
 	if d := os.Getenv("SYSDATA_DIR"); d != "" {
 		return d + "/logs"
+	}
+	if runtime.GOOS == "windows" {
+		pd := os.Getenv("ProgramData")
+		if pd == "" {
+			pd = `C:\ProgramData`
+		}
+		return pd + `\SysWorker\logs`
 	}
 	home, _ := os.UserHomeDir()
 	if home == "" {

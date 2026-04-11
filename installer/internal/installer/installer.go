@@ -5,6 +5,7 @@ import (
         "io"
         "os"
         "path/filepath"
+        "time"
 
         "github.com/Zam83-AZE/zaur-test/installer/internal/detect"
         "github.com/Zam83-AZE/zaur-test/installer/internal/downloader"
@@ -170,6 +171,10 @@ func (inst *Installer) install() error {
                 if err := mgr.Uninstall(); err != nil {
                         inst.Printf("       WARNING: Failed to uninstall service: %v\n", err)
                 }
+		// Wait for the old process to fully exit.
+		// Windows cannot delete a running .exe file.
+		inst.Printf("       Waiting for process to exit...\n")
+		time.Sleep(2 * time.Second)
         } else {
                 inst.Printf("       No existing installation found.\n")
         }
