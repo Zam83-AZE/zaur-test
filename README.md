@@ -24,6 +24,60 @@ Cross-platform system monitoring service that collects hardware and OS informati
                                               +---------------+
 ```
 
+## How the Installer Works
+
+The installer is a **lightweight bootstrap binary** (~5MB) that you download from GitHub Releases. When you run it, it handles everything automatically:
+
+```
+Step 1: Detect           Step 2: Fetch           Step 3: Download
++-----------------+     +-------------------+    +------------------+
+| Detect OS &     | --> | Query GitHub      | -> | Download worker  |
+| Architecture    |     | Releases API for  |    | binary for your  |
+| (linux/amd64,   |     | latest/specified  |    | platform from    |
+| windows/amd64,  |     | release version   |    | GitHub Releases  |
+| darwin/arm64)   |     |                   |    |                  |
++-----------------+     +-------------------+    +------------------+
+                                                          |
+Step 4: Verify           Step 5: Cleanup         Step 6: Install
++-----------------+     +-------------------+    +------------------+
+| Verify SHA256   | <-- | Stop old service  | <- | Remove old       |
+| checksum against|     | if upgrading      |    | worker binary    |
+| checksums.txt   |     +-------------------+    +------------------+
++-----------------+                                      |
+                                                          v
+                                                   +------------------+
+                                                   | Copy new worker  |
+                                                   | binary to system |
+                                                   | path, set perms  |
+                                                   +------------------+
+                                                          |
+                                                          v
+                                                   +------------------+
+                                                   | Install as       |
+                                                   | system service   |
+                                                   | (auto-start on   |
+                                                   | boot)            |
+                                                   +------------------+
+```
+
+### What actually happens on your machine:
+
+1. **You download the installer** (e.g. `installer-linux-amd64`) from the [Releases](https://github.com/Zam83-AZE/zaur-test/releases) page
+2. **You run it** with `sudo ./installer-linux-amd64`
+3. **The installer detects your platform** (OS + CPU architecture)
+4. **It calls GitHub Releases API** to find the matching worker binary (`sysworker-linux-amd64`)
+5. **It downloads the worker binary** to a temporary directory
+6. **It verifies the SHA256 checksum** against `checksums.txt` from the same release
+7. **It stops any previous version** of the service if one exists
+8. **It copies the new binary** to the system path (`/usr/local/bin/sysworker` on Linux)
+9. **It registers the worker as a system service** that auto-starts on boot:
+   - **Linux** → creates a systemd unit file, runs `systemctl enable --now`
+   - **Windows** → registers with Service Control Manager
+   - **macOS** → creates a launchd plist in `~/Library/LaunchAgents/`
+10. **The worker starts immediately** and begins serving on `https://localhost:8088`
+
+> **TL;DR**: You only need to download and run the installer once. It downloads the actual worker binary for you, verifies it, and sets it up as a permanent background service. No manual configuration required.
+
 ## Features
 
 ### Worker
