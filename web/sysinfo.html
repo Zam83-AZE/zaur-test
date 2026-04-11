@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Monitor</title>
+    <style>
+        :root {
+            --bg-primary: #0f1117;
+            --bg-secondary: #1a1d29;
+            --bg-card: #232635;
+            --text-primary: #e4e6f0;
+            --text-secondary: #9499b3;
+            --accent: #6c8cff;
+            --accent-hover: #8aa4ff;
+            --success: #34d399;
+            --warning: #fbbf24;
+            --error: #f87171;
+            --border: #2e3347;
+            --radius: 10px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        header .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .status-badge.ok {
+            background: rgba(52, 211, 153, 0.15);
+            color: var(--success);
+        }
+
+        .status-badge.err {
+            background: rgba(248, 113, 113, 0.15);
+            color: var(--error);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .btn {
+            padding: 8px 18px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        .btn:active {
+            transform: scale(0.97);
+        }
+
+        .btn.loading {
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        .settings-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .settings-row input {
+            width: 240px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 0.85rem;
+        }
+
+        main {
+            max-width: 1200px;
+            margin: 24px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .card-header .icon {
+            font-size: 1.2rem;
+        }
+
+        .card-body {
+            padding: 16px 20px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 10px 14px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .info-item .label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .info-item .value {
+            font-size: 0.95rem;
+            color: var(--text-primary);
+            word-break: break-word;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 10px 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.88rem;
+        }
+
+        th {
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.75rem;
+            background: var(--bg-secondary);
+        }
+
+        tr:hover td {
+            background: rgba(108, 140, 255, 0.04);
+        }
+
+        .mono {
+            font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+            font-size: 0.85rem;
+        }
+
+        #error-container {
+            display: none;
+            background: rgba(248, 113, 113, 0.1);
+            border: 1px solid rgba(248, 113, 113, 0.3);
+            border-radius: var(--radius);
+            padding: 16px 20px;
+            margin-bottom: 16px;
+            color: var(--error);
+        }
+
+        #error-container .error-title {
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        #error-container .error-msg {
+            font-size: 0.9rem;
+            font-family: monospace;
+        }
+
+        .timestamp {
+            text-align: center;
+            padding: 12px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: var(--bg-primary);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+
+        .progress-bar .fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+
+        .fill.green { background: var(--success); }
+        .fill.yellow { background: var(--warning); }
+        .fill.red { background: var(--error); }
+
+        @media (max-width: 600px) {
+            header { padding: 14px 16px; }
+            header h1 { font-size: 1.2rem; }
+            main { padding: 0 12px; }
+            .info-grid { grid-template-columns: 1fr; }
+            .settings-row { width: 100%; }
+            .settings-row input { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>System Monitor</h1>
+    <div class="header-right">
+        <div id="status-badge" class="status-badge err">
+            <span class="status-dot"></span>
+            <span id="status-text">Connecting...</span>
+        </div>
+        <div class="settings-row">
+            <label for="api-url">API:</label>
+            <input type="text" id="api-url" value="https://localhost:8088/data" placeholder="https://localhost:8088/data">
+        </div>
+        <button class="btn" id="refresh-btn" onclick="fetchData()">Refresh</button>
+        <button class="btn" id="auto-btn" onclick="toggleAuto()">Auto: OFF</button>
+    </div>
+</header>
+
+<main>
+    <div id="error-container">
+        <div class="error-title">Connection Error</div>
+        <div class="error-msg" id="error-msg"></div>
+    </div>
+
+    <div id="content" style="display:none;"></div>
+</main>
+
+<script>
+    let autoInterval = null;
+
+    function getApiUrl() {
+        return document.getElementById('api-url').value.trim();
+    }
+
+    function setStatus(ok, text) {
+        const badge = document.getElementById('status-badge');
+        const statusText = document.getElementById('status-text');
+        badge.className = 'status-badge ' + (ok ? 'ok' : 'err');
+        statusText.textContent = text;
+    }
+
+    function showError(msg) {
+        const el = document.getElementById('error-container');
+        document.getElementById('error-msg').textContent = msg;
+        el.style.display = 'block';
+        document.getElementById('content').style.display = 'none';
+        setStatus(false, 'Error');
+    }
+
+    function hideError() {
+        document.getElementById('error-container').style.display = 'none';
+    }
+
+    function toggleAuto() {
+        const btn = document.getElementById('auto-btn');
+        if (autoInterval) {
+            clearInterval(autoInterval);
+            autoInterval = null;
+            btn.textContent = 'Auto: OFF';
+        } else {
+            fetchData();
+            autoInterval = setInterval(fetchData, 5000);
+            btn.textContent = 'Auto: 5s';
+        }
+    }
+
+    function esc(s) {
+        const d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+
+    function makeInfoGrid(items) {
+        let html = '<div class="info-grid">';
+        for (const [label, value] of items) {
+            html += '<div class="info-item"><span class="label">' + esc(label) + '</span><span class="value">' + esc(String(value != null ? value : 'N/A')) + '</span></div>';
+        }
+        html += '</div>';
+        return html;
+    }
+
+    function makeTable(headers, rows) {
+        let html = '<div class="table-wrapper"><table><thead><tr>';
+        for (const h of headers) html += '<th>' + esc(h) + '</th>';
+        html += '</tr></thead><tbody>';
+        for (const row of rows) {
+            html += '<tr>';
+            for (const cell of row) html += '<td class="mono">' + esc(String(cell != null ? cell : 'N/A')) + '</td>';
+            html += '</tr>';
+        }
+        html += '</tbody></table></div>';
+        return html;
+    }
+
+    function makeCard(title, icon, bodyHtml) {
+        return '<div class="card"><div class="card-header"><span class="icon">' + icon + '</span>' + esc(title) + '</div><div class="card-body">' + bodyHtml + '</div></div>';
+    }
+
+    function usageColor(pct) {
+        if (pct >= 90) return 'red';
+        if (pct >= 70) return 'yellow';
+        return 'green';
+    }
+
+    function renderData(data) {
+        hideError();
+        let html = '';
+
+        // Overview
+        const overviewItems = [];
+        if (data.hostname) overviewItems.push(['Hostname', data.hostname]);
+        if (data.version) overviewItems.push(['Worker Version', data.version]);
+        if (data.os) overviewItems.push(['OS', [data.os.name, data.os.kernel, data.os.arch].filter(Boolean).join(' | ')]);
+        if (data.bios) overviewItems.push(['BIOS', data.bios.vendor + ' v' + data.bios.version + ' (' + data.bios.release_date + ')']);
+        if (data.baseboard) overviewItems.push(['Baseboard', data.baseboard.manufacturer + ' ' + data.baseboard.product + ' (' + data.baseboard.version + ')']);
+        if (overviewItems.length) html += makeCard('Overview', '&#127760;', makeInfoGrid(overviewItems));
+
+        // CPU
+        if (data.cpu) {
+            const cpuItems = [
+                ['Model', data.cpu.model],
+                ['Physical Cores', data.cpu.physical_cores],
+                ['Logical Cores', data.cpu.logical_cores],
+                ['Frequency', (data.cpu.frequency_mhz != null) ? data.cpu.frequency_mhz + ' MHz' : 'N/A']
+            ];
+            html += makeCard('CPU', '&#128295;', makeInfoGrid(cpuItems));
+        }
+
+        // Memory
+        if (data.memory) {
+            const total = data.memory.total_gb;
+            const avail = data.memory.available_gb;
+            const used = total - avail;
+            const pct = total > 0 ? Math.round((used / total) * 100) : 0;
+            const color = usageColor(pct);
+            const memHtml = makeInfoGrid([
+                ['Total', total.toFixed(1) + ' GB'],
+                ['Available', avail.toFixed(1) + ' GB'],
+                ['Used', used.toFixed(1) + ' GB (' + pct + '%)']
+            ]) + '<div class="progress-bar"><div class="fill ' + color + '" style="width:' + pct + '%"></div></div>';
+            html += makeCard('Memory', '&#128190;', memHtml);
+        }
+
+        // Disks
+        if (data.disks && data.disks.length) {
+            const rows = data.disks.map(function(d) {
+                const totalGB = d.total_bytes ? (d.total_bytes / (1024*1024*1024)).toFixed(1) : 'N/A';
+                const usedGB = d.used_bytes ? (d.used_bytes / (1024*1024*1024)).toFixed(1) : 'N/A';
+                const freeGB = d.free_bytes ? (d.free_bytes / (1024*1024*1024)).toFixed(1) : 'N/A';
+                return [d.device || d.filesystem || 'N/A', d.mount_point || 'N/A', d.type || 'N/A', totalGB + ' GB', usedGB + ' GB', freeGB + ' GB'];
+            });
+            html += makeCard('Disks', '&#128187;', makeTable(['Device', 'Mount', 'Type', 'Total', 'Used', 'Free'], rows));
+        }
+
+        // Network
+        if (data.network && data.network.length) {
+            const rows = data.network.map(function(n) {
+                return [
+                    n.interface || n.name || 'N/A',
+                    n.ip_address || n.ip || 'N/A',
+                    n.mac_address || n.mac || 'N/A',
+                    n.status || n.up ? (n.status || 'up') : 'N/A'
+                ];
+            });
+            html += makeCard('Network', '&#127760;', makeTable(['Interface', 'IP Address', 'MAC Address', 'Status'], rows));
+        }
+
+        // GPU
+        if (data.gpu && data.gpu.length) {
+            const rows = data.gpu.map(function(g) {
+                return [g.name || g.model || 'N/A', g.vendor || 'N/A', g.memory || g.vram || 'N/A', g.driver || 'N/A'];
+            });
+            html += makeCard('GPU', '&#128247;', makeTable(['Model', 'Vendor', 'Memory', 'Driver'], rows));
+        }
+
+        // User
+        if (data.current_user) {
+            const u = data.current_user;
+            const userItems = [
+                ['Username', u.username || u.name || 'N/A'],
+                ['Home Dir', u.home_dir || 'N/A'],
+                ['UID', u.uid != null ? u.uid : 'N/A'],
+                ['GID', u.gid != null ? u.gid : 'N/A']
+            ];
+            html += makeCard('Current User', '&#128100;', makeInfoGrid(userItems));
+        }
+
+        html += '<div class="timestamp">Last updated: ' + new Date().toLocaleString() + '</div>';
+
+        document.getElementById('content').innerHTML = html;
+        document.getElementById('content').style.display = 'block';
+        setStatus(true, 'Connected');
+    }
+
+    async function fetchData() {
+        const url = getApiUrl();
+        if (!url) { showError('Please enter a valid API URL.'); return; }
+
+        const btn = document.getElementById('refresh-btn');
+        btn.classList.add('loading');
+        btn.textContent = 'Loading...';
+
+        try {
+            const resp = await fetch(url, {
+                method: 'GET',
+                mode: 'cors',
+            });
+
+            if (!resp.ok) {
+                throw new Error('HTTP ' + resp.status + ': ' + resp.statusText);
+            }
+
+            const data = await resp.json();
+            renderData(data);
+        } catch (err) {
+            let msg = err.message;
+            if (err.message.indexOf('Failed to fetch') !== -1 || err.message.indexOf('NetworkError') !== -1) {
+                msg = 'Cannot connect to ' + url + '. Make sure the worker is running and this page is served via HTTPS.';
+            }
+            showError(msg);
+            setStatus(false, 'Disconnected');
+        } finally {
+            btn.classList.remove('loading');
+            btn.textContent = 'Refresh';
+        }
+    }
+
+    // Allow Enter key on input to trigger fetch
+    document.getElementById('api-url').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') fetchData();
+    });
+
+    // Initial fetch
+    fetchData();
+</script>
+
+</body>
+</html>
